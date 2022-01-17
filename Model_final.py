@@ -9,13 +9,14 @@ from tensorflow.keras import layers
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.metrics import Recall
 
 import pathlib
 import shutil
 
 batch_size = 64
 learning_rate = 0.0002
-epochs = 20
+epochs = 2
 
 data_dir = "data/IA" # modifier data pour n'avoir que deux categorie/fichier
 data_dir = pathlib.Path(data_dir)
@@ -26,6 +27,7 @@ train_ds = tf.keras.utils.image_dataset_from_directory(
   subset="training",
   seed=123,
   image_size=(480, 640),
+  label_mode='categorical',
   batch_size=batch_size)
 
 val_ds = tf.keras.utils.image_dataset_from_directory(
@@ -34,6 +36,7 @@ val_ds = tf.keras.utils.image_dataset_from_directory(
   subset="validation",
   seed=123,
   image_size=(480, 640),
+  label_mode='categorical',
   batch_size=batch_size)
 
 class_names = train_ds.class_names
@@ -57,12 +60,12 @@ def train():
         layers.MaxPooling2D(),
         layers.Flatten(),
         layers.Dense(128, activation='relu'),
-        layers.Dense(num_classes)
+        layers.Dense(num_classes, activation='softmax')
     ])
 
     model.compile(optimizer=Adam(learning_rate),
-                  loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-                  metrics=['accuracy'])
+                  loss=tf.keras.losses.CategoricalCrossentropy(),
+                  metrics=['accuracy', Recall()])
 
     history = model.fit(
         train_ds,
@@ -82,14 +85,13 @@ def predict(data_test) :
     img_array = tf.expand_dims(data_test, 0)
 
     predictions = model.predict(img_array)
-    score = tf.nn.softmax(predictions[0])
+    score = predictions[0]
 
     print(
         "This image most likely belongs to {} with a {:.2f} percent confidence."
         .format(class_names[np.argmax(score)], 100 * np.max(score))
     )
 
-#train()
+train()
 
 predict(next(iter(val_ds))[0][0])
-  
