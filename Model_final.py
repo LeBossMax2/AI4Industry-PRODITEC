@@ -15,7 +15,7 @@ from tensorflow.keras.metrics import Recall
 import pathlib
 import shutil
 
-batch_size = 64
+batch_size = 64 # TODO tester un batch size plus gros
 learning_rate = 0.0002
 epochs = 20
 
@@ -77,20 +77,7 @@ def categorical_mse(true_label, pred):
     return K.mean((true_cat - pred_cat)**2)
 
 def build_model():
-    model = Sequential([
-        layers.Conv2D(16, 3, padding='same', activation='relu', input_shape=(224, 224, 3)),
-        layers.MaxPooling2D(),
-        layers.Dropout(0.2),
-        layers.Conv2D(32, 3, padding='same', activation='relu'),
-        layers.MaxPooling2D(),
-        layers.Dropout(0.2),
-        layers.Conv2D(64, 3, padding='same', activation='relu'),
-        layers.MaxPooling2D(),
-        layers.Dropout(0.2),
-        layers.Flatten(),
-        layers.Dense(128, activation='relu'),
-        layers.Dense(num_classes, activation='softmax')
-    ])
+    model = keras.applications.ResNet50V2(weights=None, include_top=True, classes=num_classes, classifier_activation='softmax')
 
     model.compile(optimizer=Adam(learning_rate),
                   loss=tf.keras.losses.CategoricalCrossentropy(),
@@ -105,12 +92,20 @@ def train():
         train_ds,
         validation_data=val_ds,
         epochs=epochs,
-        callbacks=[EarlyStopping(patience=4)]
+        callbacks=[EarlyStopping(patience=8, restore_best_weights=True)]
     )
 
     print('\nSaving...')
     model.save_weights("My_model")
     print('Ok')
+
+def evaluate():
+
+    model = build_model()
+    model.load_weights("My_model")
+
+    val_eval = model.evaluate(val_ds)
+    print("Val:", val_eval)
 
 def predict(data_test) :
 
@@ -129,6 +124,6 @@ def predict(data_test) :
 
 train()
 
+evaluate()
+
 predict(next(iter(val_ds))[0][0])
-#val_loss: 0.3867 - val_accuracy: 0.8617 - val_recall: 0.8208 - val_categorical_mse: 0.2667
-#val_loss: 0.3172 - val_accuracy: 0.8827 - val_recall: 0.8142 - val_categorical_mse: 0.0667
