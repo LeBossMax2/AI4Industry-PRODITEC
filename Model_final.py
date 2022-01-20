@@ -17,7 +17,7 @@ import shutil
 
 batch_size = 64 # TODO tester un batch size plus gros
 learning_rate = 0.0002
-epochs = 20
+epochs = 30
 
 data_dir = "data/IA" # modifier data pour n'avoir que deux categorie/fichier
 data_dir = pathlib.Path(data_dir)
@@ -39,7 +39,6 @@ train_ds = tf.keras.utils.image_dataset_from_directory(
   seed=123,
   image_size=(480, 480),
   crop_to_aspect_ratio=True,
-  label_mode='categorical',
   batch_size=batch_size)
 
 class_names = train_ds.class_names
@@ -52,7 +51,6 @@ val_ds = tf.keras.utils.image_dataset_from_directory(
   seed=123,
   image_size=(480, 480),
   crop_to_aspect_ratio=True,
-  label_mode='categorical',
   batch_size=batch_size).map(preprocess_image)
 
 plt.figure(figsize=(10, 10))
@@ -70,6 +68,22 @@ AUTOTUNE = tf.data.AUTOTUNE
 
 num_classes = len(class_names)
 
+def positive_accuracy(true_label, pred):
+    true_pred = K.round(pred[true_label < 3])
+    return tf.cond(
+        tf.size(true_pred) == 0,
+        lambda: 0.,
+        lambda: K.mean(true_pred < 3)
+    )
+
+def negative_accuracy(true_label, pred):
+    false_pred = K.round(pred[true_label >= 3])
+    return tf.cond(
+        tf.size(false_pred) == 0,
+        lambda: 0.,
+        lambda: K.mean(false_pred >= 3)
+    )
+
 def categorical_mse(true_label, pred):
     true_cat = K.argmax(true_label)
     pred_cat = K.argmax(pred)
@@ -77,11 +91,11 @@ def categorical_mse(true_label, pred):
     return K.mean((true_cat - pred_cat)**2)
 
 def build_model():
-    model = keras.applications.ResNet50V2(weights=None, include_top=True, classes=num_classes, classifier_activation='softmax')
+    model = keras.applications.ResNet50V2(include_top=True, weights=None, classes=1, classifier_activation=None)
 
     model.compile(optimizer=Adam(learning_rate),
-                  loss=tf.keras.losses.CategoricalCrossentropy(),
-                  metrics=['accuracy', Recall(), categorical_mse])
+                  loss="mse",
+                  metrics=['accuracy', positive_accuracy, negative_accuracy]) #, Recall(), categorical_mse
     return model
 
 def train():
@@ -107,6 +121,11 @@ def evaluate():
     val_eval = model.evaluate(val_ds)
     print("Val:", val_eval)
 
+    val_pred = model.predict(val_ds)
+    labels = tf.concat([y for x, y in val_ds], axis=0)
+
+    print(tf.math.confusion_matrix(labels, K.round(val_pred), num_classes=num_classes))
+
 def predict(data_test) :
 
     model = build_model()
@@ -126,4 +145,4 @@ train()
 
 evaluate()
 
-predict(next(iter(val_ds))[0][0])
+#predict(next(iter(val_ds))[0][0])
