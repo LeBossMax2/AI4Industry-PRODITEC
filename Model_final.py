@@ -15,11 +15,11 @@ from tensorflow.keras.metrics import Recall
 import pathlib
 import shutil
 
-batch_size = 64 # TODO tester un batch size plus gros
+batch_size = 128 # TODO tester un batch size plus gros
 learning_rate = 0.0002
 epochs = 30
 
-data_dir = "data/IA" # modifier data pour n'avoir que deux categorie/fichier
+data_dir = "data/IA_test" # modifier data pour n'avoir que deux categorie/fichier
 data_dir = pathlib.Path(data_dir)
 
 crop = layers.Cropping2D(cropping=80)
@@ -27,7 +27,7 @@ resize = layers.Resizing(224, 224)
 rescaling = layers.Rescaling(1/255, offset=0)
 
 def preprocess_image(img, label):
-    img = crop(img)
+    #img = crop(img)
     img = resize(img)
     img = rescaling(img)
     return img, label
@@ -69,33 +69,27 @@ AUTOTUNE = tf.data.AUTOTUNE
 num_classes = len(class_names)
 
 def positive_accuracy(true_label, pred):
-    true_pred = K.round(pred[true_label < 3])
+    true_pred = K.round(tf.boolean_mask(pred, tf.math.less(true_label, tf.constant([3.0])), axis = 0))
     return tf.cond(
         tf.size(true_pred) == 0,
         lambda: 0.,
-        lambda: K.mean(true_pred < 3)
+        lambda: K.mean(tf.math.less(true_pred, tf.constant([3.0])))
     )
 
 def negative_accuracy(true_label, pred):
-    false_pred = K.round(pred[true_label >= 3])
+    false_pred = K.round(tf.boolean_mask(pred, tf.math.greater_equal(true_label, tf.constant([3.0])), axis = 0))
     return tf.cond(
         tf.size(false_pred) == 0,
         lambda: 0.,
-        lambda: K.mean(false_pred >= 3)
+        lambda: K.mean(tf.math.greater_equal(false_pred, tf.constant([3.0])))
     )
-
-def categorical_mse(true_label, pred):
-    true_cat = K.argmax(true_label)
-    pred_cat = K.argmax(pred)
-    
-    return K.mean((true_cat - pred_cat)**2)
 
 def build_model():
     model = keras.applications.ResNet50V2(include_top=True, weights=None, classes=1, classifier_activation=None)
-
+#
     model.compile(optimizer=Adam(learning_rate),
                   loss="mse",
-                  metrics=['accuracy', positive_accuracy, negative_accuracy]) #, Recall(), categorical_mse
+                  metrics=['accuracy', positive_accuracy, negative_accuracy])
     return model
 
 def train():
@@ -124,7 +118,11 @@ def evaluate():
     val_pred = model.predict(val_ds)
     labels = tf.concat([y for x, y in val_ds], axis=0)
 
-    print(tf.math.confusion_matrix(labels, K.round(val_pred), num_classes=num_classes))
+    mat = tf.math.confusion_matrix(labels, K.round(K.clip(val_pred, 0, 4)), num_classes=num_classes)
+
+    print(mat)
+    
+    tf.print(K.sum(tf.linalg.diag_part(mat)) / K.sum(mat), K.sum(mat[:3, :3]) / K.sum(mat[:3, :]), K.sum(mat[3:, 3:]) / K.sum(mat[3:, :]))
 
 def predict(data_test) :
 
@@ -136,13 +134,10 @@ def predict(data_test) :
     predictions = model.predict(img_array)
     score = predictions[0]
 
-    print(
-        "This image most likely belongs to {} with a {:.2f} percent confidence."
-        .format(class_names[np.argmax(score)], 100 * np.max(score))
-    )
+    print("The score of this image is", score)
 
 train()
 
 evaluate()
 
-#predict(next(iter(val_ds))[0][0])
+predict(next(iter(val_ds))[0][0])
