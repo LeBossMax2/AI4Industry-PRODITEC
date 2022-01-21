@@ -17,8 +17,8 @@ import pathlib
 import shutil
 
 batch_size = 128
-learning_rate = 0.00002
-epochs = 800
+learning_rate = 0.0001
+epochs = 20
 
 data_dir = "data/IA_test" # modifier data pour n'avoir que deux categorie/fichier
 data_dir = pathlib.Path(data_dir)
@@ -86,7 +86,15 @@ def negative_accuracy(true_label, pred):
     )
 
 def build_model():
-    model = keras.applications.ResNet50V2(include_top=True, weights=None, classes=1, classifier_activation=None)
+
+    input = layers.Input(shape=(224, 224, 3))
+
+    resnet = keras.applications.ResNet50V2(include_top=False, input_shape=(224, 224, 3))
+    x = resnet(input, training=True)
+    x = layers.Flatten()(x)
+    x = layers.Dense(1)(x)
+
+    model = tf.keras.models.Model(inputs=input, outputs=x)
 
     model.compile(optimizer=Adam(learning_rate),
                   loss="mse",
@@ -109,7 +117,7 @@ def train():
         validation_data=val_ds,
         class_weight=class_weights,
         epochs=epochs,
-        callbacks=[EarlyStopping(patience=20, restore_best_weights=True)]
+        callbacks=[EarlyStopping(patience=8, restore_best_weights=True)]
     )
 
     plt.figure(figsize=(15,5))
